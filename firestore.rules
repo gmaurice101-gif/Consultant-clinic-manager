@@ -1,0 +1,98 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: uid
+    // Fields:
+    //   - uid: string (required)
+    //   - email: string (required, email format)
+    //   - role: string (required, enum: ["admin", "consultant"])
+    //   - hospitalId: string (optional)
+    //
+    // Collection: patients
+    // Document ID: auto-generated
+    // Fields:
+    //   - name: string (required)
+    //   - phone: string (required)
+    //   - diagnosis: string (required)
+    //   - hospitalId: string (required)
+    //   - type: string (required, enum: ["clinic", "surgery"])
+    //   - status: string (required, enum: ["booked", "attended", "no-show"])
+    //   - surgeryStatus: string (optional, enum: ["not pre-authorized", "awaiting preauth approval", "pre-authorization approved"])
+    //   - date: string (required, ISO date)
+    //   - createdAt: timestamp (required)
+    //   - createdBy: string (required, uid)
+    //
+    // Collection: hospitals
+    // Document ID: auto-generated
+    // Fields:
+    //   - name: string (required)
+    //
+    // ===============================================================
+
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+         (request.auth.token.email == "godiimwas@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isConsultant() {
+      return isAuthenticated() && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'consultant';
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'role']) &&
+             data.uid is string &&
+             data.email is string &&
+             data.role in ['admin', 'consultant'];
+    }
+
+    function isValidPatient(data) {
+      return data.keys().hasAll(['name', 'phone', 'diagnosis', 'hospitalId', 'type', 'status', 'date', 'createdAt', 'createdBy']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.phone is string && data.phone.size() > 0 && data.phone.size() < 20 &&
+             data.diagnosis is string && data.diagnosis.size() > 0 && data.diagnosis.size() < 500 &&
+             data.hospitalId is string &&
+             data.type in ['clinic', 'surgery'] &&
+             data.status in ['booked', 'attended', 'no-show'] &&
+             data.date is string &&
+             data.createdAt is timestamp &&
+             data.createdBy is string;
+    }
+
+    // Rules
+    match /users/{uid} {
+      allow read: if isAuthenticated();
+      allow create: if isOwner(uid) && isValidUser(request.resource.data) && (request.resource.data.role == 'consultant' || isAdmin());
+      allow update: if isOwner(uid) && isValidUser(request.resource.data) && (request.resource.data.role == resource.data.role || isAdmin());
+    }
+
+    match /patients/{patientId} {
+      allow read: if isAuthenticated();
+      allow create: if (isAdmin() || isConsultant()) && isValidPatient(request.resource.data);
+      allow update: if isAuthenticated() && 
+                    (isAdmin() || isConsultant()) && 
+                    isValidPatient(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /hospitals/{hospitalId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+  }
+}

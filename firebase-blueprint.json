@@ -1,0 +1,57 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile with role and hospital affiliation",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "role": { "type": "string", "enum": ["admin", "consultant"] },
+        "hospitalId": { "type": "string", "description": "Optional hospital ID for admins" }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "Patient": {
+      "title": "Patient",
+      "description": "Patient booking information for clinic or surgery",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "diagnosis": { "type": "string" },
+        "hospitalId": { "type": "string" },
+        "type": { "type": "string", "enum": ["clinic", "surgery"] },
+        "status": { "type": "string", "enum": ["booked", "attended", "no-show"] },
+        "surgeryStatus": { "type": "string", "enum": ["not pre-authorized", "awaiting preauth approval", "pre-authorization approved"] },
+        "date": { "type": "string", "format": "date", "description": "ISO date string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "createdBy": { "type": "string", "description": "UID of the admin who booked" }
+      },
+      "required": ["name", "phone", "diagnosis", "hospitalId", "type", "status", "date"]
+    },
+    "Hospital": {
+      "title": "Hospital",
+      "description": "Hospital where clinics and surgeries are held",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" }
+      },
+      "required": ["name"]
+    }
+  },
+  "firestore": {
+    "/users/{uid}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/patients/{patientId}": {
+      "schema": "Patient",
+      "description": "Patient bookings"
+    },
+    "/hospitals/{hospitalId}": {
+      "schema": "Hospital",
+      "description": "Hospitals list"
+    }
+  }
+}
