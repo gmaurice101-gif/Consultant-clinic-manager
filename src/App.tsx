@@ -101,6 +101,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate, Link, useNavigate } f
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut, User } from 'firebase/auth';
 import { doc, getDoc, setDoc, onSnapshot, collection, query, where, orderBy, addDoc, updateDoc, deleteDoc, serverTimestamp, getDocs } from 'firebase/firestore';
 import { auth, db } from './firebase';
+import { getDocFromServer } from 'firebase/firestore';
 import { UserProfile, Patient, Hospital, UserRole } from './types';
 import { format, startOfDay, endOfDay, isSameDay, parseISO, addDays, isAfter, isBefore, startOfWeek, endOfWeek, eachDayOfInterval } from 'date-fns';
 import { LogIn, LogOut, Plus, Calendar, User as UserIcon, ClipboardList, Hospital as HospitalIcon, CheckCircle, XCircle, Clock, FileText, Printer, Download, ChevronRight, ChevronLeft, Search, Bell, Filter, Send, Trash2 } from 'lucide-react';
@@ -1387,6 +1388,20 @@ export default function App() {
   useEffect(() => {
     console.log('App: Setting up auth listener');
     
+    // Connection test
+    const testConnection = async () => {
+      try {
+        await getDocFromServer(doc(db, 'test', 'connection'));
+        console.log('App: Firestore connection test successful');
+      } catch (error) {
+        if (error instanceof Error && error.message.includes('the client is offline')) {
+          console.error("App: Firestore connection failed. Please check your Firebase configuration.");
+        }
+        // Skip logging for other errors, as this is simply a connection test.
+      }
+    };
+    testConnection();
+
     // Fallback timeout to ensure loading screen doesn't hang forever
     const timeoutId = setTimeout(() => {
       if (loading) {
@@ -1422,8 +1437,13 @@ export default function App() {
   }, []);
 
   const signIn = async () => {
-    const provider = new GoogleAuthProvider();
-    await signInWithPopup(auth, provider);
+    try {
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+    } catch (error) {
+      console.error('App: Sign in error', error);
+      alert('Failed to sign in. Please try again or check if popups are blocked.');
+    }
   };
 
   const logout = async () => {
