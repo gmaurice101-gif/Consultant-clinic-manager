@@ -98,7 +98,7 @@ class ErrorBoundary extends React.Component<any, any> {
   }
 }
 import { BrowserRouter as Router, Routes, Route, Navigate, Link, useNavigate } from 'react-router-dom';
-import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut, User } from 'firebase/auth';
+import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut, User, createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
 import { doc, getDoc, setDoc, onSnapshot, collection, query, where, orderBy, addDoc, updateDoc, deleteDoc, serverTimestamp, getDocs } from 'firebase/firestore';
 import { auth, db } from './firebase';
 import { getDocFromServer } from 'firebase/firestore';
@@ -115,12 +115,16 @@ const AuthContext = createContext<{
   profile: UserProfile | null;
   loading: boolean;
   signIn: () => Promise<void>;
+  signInWithEmail: (email: string, pass: string) => Promise<void>;
+  signUpWithEmail: (email: string, pass: string) => Promise<void>;
   logout: () => Promise<void>;
 }>({
   user: null,
   profile: null,
   loading: true,
   signIn: async () => {},
+  signInWithEmail: async () => {},
+  signUpWithEmail: async () => {},
   logout: async () => {},
 });
 
@@ -167,14 +171,34 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
 };
 
 const LoginPage = () => {
-  const { signIn, user, loading } = useAuth();
+  const { signIn, signInWithEmail, signUpWithEmail, user, loading } = useAuth();
   const navigate = useNavigate();
+  const [isSignUp, setIsSignUp] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [authLoading, setAuthLoading] = useState(false);
 
   useEffect(() => {
     if (user && !loading) {
       navigate('/');
     }
   }, [user, loading, navigate]);
+
+  const handleEmailAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthLoading(true);
+    try {
+      if (isSignUp) {
+        await signUpWithEmail(email, password);
+      } else {
+        await signInWithEmail(email, password);
+      }
+    } catch (error) {
+      // Errors are handled in the context functions
+    } finally {
+      setAuthLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-neutral-900 flex items-center justify-center p-4">
@@ -183,17 +207,72 @@ const LoginPage = () => {
           <div className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center text-white mx-auto mb-6 shadow-lg shadow-indigo-500/20">
             <ClipboardList size={32} />
           </div>
-          <h2 className="text-3xl font-bold text-neutral-900 mb-2">Welcome Back</h2>
-          <p className="text-neutral-500 mb-10">Sign in to manage your clinic and patients.</p>
+          <h2 className="text-3xl font-bold text-neutral-900 mb-2">
+            {isSignUp ? 'Create Account' : 'Welcome Back'}
+          </h2>
+          <p className="text-neutral-500 mb-8">
+            {isSignUp ? 'Sign up to start managing your clinic.' : 'Sign in to manage your clinic and patients.'}
+          </p>
           
+          <form onSubmit={handleEmailAuth} className="space-y-4 mb-6">
+            <div className="text-left">
+              <label className="block text-xs font-bold text-neutral-400 uppercase tracking-widest mb-2 ml-1">Email Address</label>
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full bg-neutral-50 border-none rounded-2xl px-6 py-4 focus:ring-2 focus:ring-indigo-500 transition-all"
+                placeholder="doctor@example.com"
+              />
+            </div>
+            <div className="text-left">
+              <label className="block text-xs font-bold text-neutral-400 uppercase tracking-widest mb-2 ml-1">Password</label>
+              <input
+                type="password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full bg-neutral-50 border-none rounded-2xl px-6 py-4 focus:ring-2 focus:ring-indigo-500 transition-all"
+                placeholder="••••••••"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={authLoading}
+              className="w-full bg-indigo-600 text-white py-4 px-6 rounded-2xl font-semibold hover:bg-indigo-700 transition-all active:scale-95 shadow-xl shadow-indigo-600/20 disabled:opacity-50"
+            >
+              {authLoading ? 'Processing...' : (isSignUp ? 'Sign Up' : 'Sign In')}
+            </button>
+          </form>
+
+          <div className="relative mb-6">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-neutral-100"></div>
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-white px-4 text-neutral-400 font-bold tracking-widest">Or continue with</span>
+            </div>
+          </div>
+
           <button
             onClick={signIn}
-            className="w-full flex items-center justify-center gap-3 bg-neutral-900 text-white py-4 px-6 rounded-2xl font-semibold hover:bg-neutral-800 transition-all active:scale-95 shadow-xl shadow-neutral-900/10"
+            className="w-full flex items-center justify-center gap-3 bg-neutral-50 text-neutral-900 py-4 px-6 rounded-2xl font-semibold hover:bg-neutral-100 transition-all active:scale-95 border border-neutral-100"
           >
             <img src="https://www.google.com/favicon.ico" className="w-5 h-5" alt="Google" />
-            Continue with Google
+            Google Account
           </button>
           
+          <p className="mt-8 text-sm text-neutral-500">
+            {isSignUp ? 'Already have an account?' : "Don't have an account?"}{' '}
+            <button
+              onClick={() => setIsSignUp(!isSignUp)}
+              className="text-indigo-600 font-bold hover:underline"
+            >
+              {isSignUp ? 'Sign In' : 'Create one now'}
+            </button>
+          </p>
+
           <div className="mt-12 pt-8 border-t border-neutral-100">
             <p className="text-xs text-neutral-400 uppercase tracking-widest font-bold">
               Secure Healthcare Management
@@ -1440,9 +1519,35 @@ export default function App() {
     try {
       const provider = new GoogleAuthProvider();
       await signInWithPopup(auth, provider);
-    } catch (error) {
+    } catch (error: any) {
       console.error('App: Sign in error', error);
-      alert('Failed to sign in. Please try again or check if popups are blocked.');
+      if (error.code === 'auth/popup-blocked') {
+        alert('Popup blocked. Please allow popups for this site.');
+      } else if (error.code === 'auth/unauthorized-domain') {
+        alert('This domain is not authorized for Google Sign-In. Please add it to the Firebase console.');
+      } else {
+        alert('Failed to sign in with Google. ' + error.message);
+      }
+    }
+  };
+
+  const signInWithEmail = async (email: string, pass: string) => {
+    try {
+      await signInWithEmailAndPassword(auth, email, pass);
+    } catch (error: any) {
+      console.error('App: Email sign in error', error);
+      alert('Failed to sign in. ' + error.message);
+      throw error;
+    }
+  };
+
+  const signUpWithEmail = async (email: string, pass: string) => {
+    try {
+      await createUserWithEmailAndPassword(auth, email, pass);
+    } catch (error: any) {
+      console.error('App: Email sign up error', error);
+      alert('Failed to sign up. ' + error.message);
+      throw error;
     }
   };
 
@@ -1460,7 +1565,7 @@ export default function App() {
 
   return (
     <ErrorBoundary>
-      <AuthContext.Provider value={{ user, profile, loading, signIn, logout }}>
+      <AuthContext.Provider value={{ user, profile, loading, signIn, signInWithEmail, signUpWithEmail, logout }}>
         <Router>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
